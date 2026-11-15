@@ -74,6 +74,8 @@ jobs:
         with:
           global-json-file: global.json
       - run: dotnet tool restore
+      # The bundle command reads project metadata from obj/project.assets.json, so packages must be restored first.
+      - run: dotnet restore --locked-mode
       - name: Build EF Core migration bundle
         run: >
           dotnet ef migrations bundle
