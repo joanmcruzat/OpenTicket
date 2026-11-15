@@ -1,0 +1,63 @@
+# Local development:   docker compose up -d db          (then run the API and `npm start` yourself)
+# Self-hosted stack:   docker compose --profile app up -d --build
+# Production on Render + Neon does not use this file (docs/deployment.md).
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-openticket}
+      POSTGRES_USER: ${POSTGRES_USER:-openticket}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env (copy .env.example)}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: applies pending migrations, then exits.
+  migrate:
+    profiles: [app]
+    build: .
+    image: openticket:local
+    command: ["--migrate"]
+    environment: &app-env
+      ConnectionStrings__Default: Host=db;Port=5432;Database=${POSTGRES_DB:-openticket};Username=${POSTGRES_USER:-openticket};Password=${POSTGRES_PASSWORD}
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-}
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
+      # Optional: password reset by email (needs both PUBLIC_URL and SMTP) and social sign-in. Empty = off.
+      App__PublicUrl: ${PUBLIC_URL:-}
+      Email__SmtpHost: ${SMTP_HOST:-}
+      Email__SmtpPort: ${SMTP_PORT:-587}
+      Email__SmtpUsername: ${SMTP_USERNAME:-}
+      Email__SmtpPassword: ${SMTP_PASSWORD:-}
+      Email__From: ${SMTP_FROM:-}
+      Authentication__GitHub__ClientId: ${GITHUB_CLIENT_ID:-}
+      Authentication__GitHub__ClientSecret: ${GITHUB_CLIENT_SECRET:-}
+      Authentication__Google__ClientId: ${GOOGLE_CLIENT_ID:-}
+      Authentication__Google__ClientSecret: ${GOOGLE_CLIENT_SECRET:-}
+      # Public demo mode (one-click sign-in as every role, sample data). Never on a real instance.
+      Demo__Enabled: ${DEMO_ENABLED:-false}
+      Demo__ResetIntervalHours: ${DEMO_RESET_HOURS:-6}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    profiles: [app]
+    image: openticket:local
+    restart: unless-stopped
+    environment: *app-env
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:

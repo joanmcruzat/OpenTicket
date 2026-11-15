@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (build, format, test, audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - run: dotnet restore --locked-mode
+      - run: dotnet build --no-restore -c Release
+      - run: dotnet format --verify-no-changes --no-restore
+      # Integration tests start PostgreSQL with Testcontainers; ubuntu runners have Docker.
+      - run: dotnet test --no-build -c Release
+      - name: Fail on vulnerable NuGet packages
+        run: |
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vulnerable.txt
+          ! grep -qiE "(High|Critical)" vulnerable.txt
+
+  frontend:
+    name: Frontend (build, test, audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npx ng build --configuration production
+      - run: npx ng test --watch=false
+      - run: npm audit --omit=dev --audit-level=high
+
+  image:
+    name: Docker image
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t openticket:${{ github.sha }} .
+
+  # Runs only on main, and only after you set the repository variable DEPLOY_ENABLED=true
+  # and the secrets DATABASE_URL and RENDER_DEPLOY_HOOK_URL (docs/deployment.md).
+  deploy:
+    name: Migrate database and deploy to Render
+    runs-on: ubuntu-latest
+    needs: [image]
+    if: >
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    environment: production
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - run: dotnet tool restore
+      - name: Build EF Core migration bundle
+        run: >
+          dotnet ef migrations bundle
+          --project src/OpenTicket.Infrastructure --startup-project src/OpenTicket.API
+          --configuration Release --self-contained -r linux-x64 -o efbundle --force
+      - name: Apply migrations (before the new app version starts)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: ./efbundle --connection "$DATABASE_URL"
+      - name: Trigger Render deploy
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_URL is not set; migrations ran but no deploy was triggered."
+            exit 0
+          fi
+          curl -fsS -X POST "$RENDER_DEPLOY_HOOK_URL" -o /dev/null

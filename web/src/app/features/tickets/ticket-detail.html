@@ -1,0 +1,183 @@
+@if (ticket.isLoading() && !ticket.hasValue()) {
+  <mat-progress-bar mode="indeterminate" />
+} @else if (notFound()) {
+  <section class="centered">
+    <h1>Ticket not found</h1>
+    <p>It may not exist, or you may not have access to it.</p>
+    <a mat-button routerLink="/tickets">Back to tickets</a>
+  </section>
+} @else if (ticket.error()) {
+  <p class="error" role="alert">The ticket could not be loaded. <button mat-button (click)="ticket.reload()">Retry</button></p>
+}
+
+@if ((ticket.hasValue() ? ticket.value() : undefined); as t) {
+  @let a = actions();
+  @if (busy()) { <mat-progress-bar mode="indeterminate" class="busy" /> }
+
+  <nav class="breadcrumbs" aria-label="Breadcrumb">
+    <a routerLink="/board">Board</a>
+    <span aria-hidden="true">/</span>
+    <a routerLink="/tickets">Tickets</a>
+    <span aria-hidden="true">/</span>
+    <span class="key"><app-type-icon [type]="t.type" /> {{ t.number | ticketNumber }}</span>
+  </nav>
+
+  <div class="layout">
+    <div class="main">
+      <header class="title-row">
+        <h1>{{ t.title }}</h1>
+        @if (t.canEdit) {
+          <button mat-icon-button (click)="openEdit()" [disabled]="busy()" matTooltip="Edit summary and description"
+                  aria-label="Edit summary and description"><mat-icon>edit</mat-icon></button>
+        }
+      </header>
+
+      <section class="section">
+        <h2>Description</h2>
+        <p class="description">{{ t.description }}</p>
+      </section>
+
+      @if (t.status === 'WontDo' && t.closureNote) {
+        <section class="outcome" role="status">
+          <mat-icon>block</mat-icon>
+          <div><strong>Won't do:</strong> {{ t.closureNote }}</div>
+        </section>
+      }
+
+      <section class="section">
+        <h2>Activity</h2>
+        <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false" mat-align-tabs="start">
+          <mat-tab label="Comments ({{ (comments.hasValue() ? comments.value() : undefined)?.totalCount ?? 0 }})">
+            <div class="tab-body">
+              <app-ticket-conversation [comments]="(comments.hasValue() ? comments.value() : undefined)?.items ?? []" [canComment]="a?.canComment ?? false"
+                                       [posting]="busy()" (post)="postComment($event)" />
+            </div>
+          </mat-tab>
+          <mat-tab label="History">
+            <div class="tab-body"><app-ticket-timeline [entries]="(history.hasValue() ? history.value() : undefined) ?? []" /></div>
+          </mat-tab>
+        </mat-tab-group>
+      </section>
+    </div>
+
+    <aside class="side" aria-label="Ticket details">
+      <div class="status-row">
+        @if (t.allowedStatuses.length > 0) {
+          <button mat-flat-button class="status-button" [class]="'status-button status-' + statusCategory(t.status)"
+                  [matMenuTriggerFor]="statusMenu" [disabled]="busy()" aria-label="Change status">
+            {{ statusLabels[t.status] }} <mat-icon iconPositionEnd>expand_more</mat-icon>
+          </button>
+          <mat-menu #statusMenu="matMenu">
+            @for (s of t.allowedStatuses; track s) {
+              <button mat-menu-item (click)="moveTo(s)">
+                <span class="menu-status">→ <app-status-badge [status]="s" /></span>
+              </button>
+            }
+          </mat-menu>
+        } @else {
+          <app-status-badge [status]="t.status" />
+        }
+        @if (a?.canAssignToMe) {
+          <button mat-stroked-button (click)="assignToMe()" [disabled]="busy()"><mat-icon>person_add</mat-icon> Assign to me</button>
+        }
+      </div>
+
+      <section class="details">
+        <h2>Details</h2>
+        <dl>
+          <dt>Assignee</dt>
+          <dd>
+            @if (a?.canAssignAnyone) {
+              <mat-form-field subscriptSizing="dynamic" class="inline-field">
+                <mat-select [value]="t.assignedToId" (valueChange)="assignTo($event)" [disabled]="busy()"
+                            placeholder="Unassigned" aria-label="Assignee">
+                  @for (dev of (developers.hasValue() ? developers.value() : undefined) ?? []; track dev.id) {
+                    <mat-option [value]="dev.id">{{ dev.displayName }} · {{ dev.openTicketCount }} open</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              <span class="person"><app-avatar [name]="t.assignedToName" /> {{ t.assignedToName ?? 'Unassigned' }}</span>
+            }
+            @if (a?.canUnassign) {
+              <button mat-button class="link" (click)="unassign()" [disabled]="busy()">Unassign</button>
+            }
+            @if (developers.hasValue() && developers.value().length === 0) {
+              <span class="muted">No active developers yet. Add one under Users.</span>
+            }
+          </dd>
+
+          <dt>Reporter</dt>
+          <dd><span class="person"><app-avatar [name]="t.createdByName" /> {{ t.createdByName }}</span></dd>
+
+          <dt>Type</dt>
+          <dd>
+            @if (t.canEdit) {
+              <mat-form-field subscriptSizing="dynamic" class="inline-field">
+                <mat-select [value]="t.type" (valueChange)="updateField({ type: $event })" [disabled]="busy()" aria-label="Type">
+                  <mat-select-trigger><app-type-icon [type]="t.type" [showLabel]="true" /></mat-select-trigger>
+                  @for (type of types; track type) {
+                    <mat-option [value]="type"><app-type-icon [type]="type" [showLabel]="true" /></mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              <app-type-icon [type]="t.type" [showLabel]="true" />
+            }
+          </dd>
+
+          <dt>Priority</dt>
+          <dd>
+            @if (t.canEdit) {
+              <mat-form-field subscriptSizing="dynamic" class="inline-field">
+                <mat-select [value]="t.priority" (valueChange)="updateField({ priority: $event })" [disabled]="busy()" aria-label="Priority">
+                  <mat-select-trigger><app-priority-badge [priority]="t.priority" /></mat-select-trigger>
+                  @for (p of priorities; track p) {
+                    <mat-option [value]="p"><app-priority-badge [priority]="p" /></mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              <app-priority-badge [priority]="t.priority" />
+            }
+          </dd>
+
+          <dt>Sprint</dt>
+          <dd>
+            @if (canPlan()) {
+              <mat-form-field subscriptSizing="dynamic" class="inline-field">
+                <mat-select [value]="t.sprintId" (valueChange)="moveToSprint($event)" [disabled]="busy()" aria-label="Sprint">
+                  <mat-option [value]="null">Backlog (no sprint)</mat-option>
+                  @for (s of openSprints(); track s.id) {
+                    <mat-option [value]="s.id">{{ s.name }}{{ s.state === 'Active' ? ' · active' : '' }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              {{ t.sprintName ?? 'Backlog' }}
+            }
+          </dd>
+
+          <dt>Category</dt>
+          <dd>
+            @if (t.canEdit) {
+              <mat-form-field subscriptSizing="dynamic" class="inline-field">
+                <mat-select [value]="t.categoryId" (valueChange)="updateField({ categoryId: $event })" [disabled]="busy()" aria-label="Category">
+                  @for (c of categoryOptions(); track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
+                </mat-select>
+              </mat-form-field>
+            } @else {
+              {{ t.categoryName }}
+            }
+          </dd>
+        </dl>
+      </section>
+
+      <dl class="dates">
+        <dt>Created</dt><dd>{{ t.createdAtUtc | date: 'medium' }}</dd>
+        <dt>Updated</dt><dd>{{ t.updatedAtUtc | date: 'medium' }}</dd>
+        @if (t.closedAtUtc) { <dt>Resolved</dt><dd>{{ t.closedAtUtc | date: 'medium' }}</dd> }
+      </dl>
+    </aside>
+  </div>
+}

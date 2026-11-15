@@ -1,0 +1,92 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}
+/* You can add global styles to this file, and also import other style files */
+
+// ---- OpenTicket global styles ----
+html, body { height: 100%; }
+h1 { font: var(--mat-sys-headline-medium); margin: 0; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 8px; }
+.subtitle { color: var(--mat-sys-on-surface-variant); margin: 0 0 16px; }
+.error { color: var(--mat-sys-error); }
+.centered { text-align: center; padding: 48px 16px; }
+a { color: var(--mat-sys-primary); }
+
+.badge {
+  display: inline-block; padding: 2px 10px; border-radius: 999px; white-space: nowrap;
+  font: var(--mat-sys-label-medium);
+  background: var(--mat-sys-surface-container-high); color: var(--mat-sys-on-surface);
+}
+
+// Status lozenges: grey = not started, blue = in flight, green = done, muted red = won't do.
+.lozenge {
+  display: inline-block; padding: 1px 6px; border-radius: 3px; white-space: nowrap;
+  font: 700 11px/18px Roboto, sans-serif; letter-spacing: 0.03em; text-transform: uppercase;
+}
+.lozenge-todo { background: #dfe1e6; color: #42526e; }
+.lozenge-doing { background: #deebff; color: #0747a6; }
+.lozenge-done { background: #e3fcef; color: #006644; }
+.lozenge-dropped { background: #ffebe6; color: #bf2600; }
+
+// Issue type icons
+.type-icon {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 16px; height: 16px; border-radius: 3px; color: #fff;
+}
+.type-icon mat-icon { font-size: 12px; width: 12px; height: 12px; line-height: 12px; }
+.type-bug { background: #e5493a; }
+.type-task { background: #4bade8; }
+.type-story { background: #63ba3c; }
+.type-improvement { background: #904ee2; }
+
+// Priority arrows
+.priority-icon { font-size: 20px; width: 20px; height: 20px; }
+.priority-urgent { color: #de350b; }
+.priority-high { color: #ff7452; }
+.priority-medium { color: #ffab00; }
+.priority-low { color: #2684ff; }
+
+// Avatars
+.avatar {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  border-radius: 50%; color: #fff; font-weight: 600; user-select: none;
+}
+.avatar-empty { border: 1px dashed var(--mat-sys-outline); color: var(--mat-sys-outline); background: transparent; }
+.avatar-empty mat-icon { width: auto; height: auto; }
+
+.issue-key { color: var(--mat-sys-on-surface-variant); font: 500 12px/16px Roboto, sans-serif; white-space: nowrap; }
